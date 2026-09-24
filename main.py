@@ -2,7 +2,6 @@ import os
 import glob
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -14,10 +13,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # =====================================================================
 # SECTION 1: PREPROCESSING & DATA INTEGRATION
 # =====================================================================
-base_dir = os.getcwd()  # Dynamic path for GitHub Actions environment
+base_dir = os.getcwd()
 price_dir = os.path.join(base_dir, "2_Price_Market")
-weather_dir = os.path.join(base_dir, "1_Weather")
-holiday_dir = os.path.join(base_dir, "3_Holidays")
 
 plots_dir = os.path.join(base_dir, "Project_Plots")
 os.makedirs(plots_dir, exist_ok=True)
@@ -31,6 +28,10 @@ valid_markets = [
 ]
 
 def parse_agmarknet_folder(folder_path, state_name):
+    if not folder_path or not os.path.exists(folder_path):
+        print(f"Warning: Folder path '{folder_path}' not found.")
+        return pd.DataFrame()
+
     all_files = glob.glob(os.path.join(folder_path, "*.xlsx")) + glob.glob(os.path.join(folder_path, "*.xls"))
     records = []
     
@@ -72,8 +73,17 @@ def parse_agmarknet_folder(folder_path, state_name):
                     
     return pd.DataFrame(records)
 
-ap_folder = os.path.join(price_dir, "tomato prices in ap")
-tg_folder = os.path.join(price_dir, "tomato prices in telangana")
+# Flexible folder detection
+ap_folder = None
+tg_folder = None
+
+for item in os.listdir(price_dir):
+    full_p = os.path.join(price_dir, item)
+    if os.path.isdir(full_p):
+        if "ap" in item.lower():
+            ap_folder = full_p
+        elif "telangana" in item.lower():
+            tg_folder = full_p
 
 df_ap = parse_agmarknet_folder(ap_folder, "Andhra Pradesh")
 df_tg = parse_agmarknet_folder(tg_folder, "Telangana")
@@ -139,7 +149,7 @@ final_weekly_df = pd.concat(weekly_dfs, ignore_index=True)
 
 output_path = os.path.join(base_dir, "Weekly_Tomato_Supply_Chain_Data.xlsx")
 final_weekly_df.to_excel(output_path, index=False)
-print("Preprocessing complete. Weekly matrix generated.")
+print("Preprocessing complete.")
 
 # =====================================================================
 # SECTION 2: MACHINE LEARNING MODEL EVALUATION
@@ -192,7 +202,7 @@ for name, model in models.items():
 scorecard = pd.DataFrame(results)
 metrics_file = os.path.join(base_dir, "Model_Evaluation_Metrics.xlsx")
 scorecard.to_excel(metrics_file, index=False)
-print("ML training complete. Metrics recorded.")
+print("ML training complete.")
 
 # =====================================================================
 # SECTION 3: ANYLOGISTIX MULTI-SHEET SCENARIO EXPORT
@@ -219,7 +229,6 @@ for market_name, m_group in df_clean.groupby('Region_Market'):
 
 df_demand = pd.DataFrame(demand_records)
 
-# Mandatory scenario topology tables for AnyLogistix
 df_customers = pd.DataFrame([
     {"Name": "Madanapalli APMC", "Type": "Customer", "Location": "13.5500, 78.5000"},
     {"Name": "Palamaner APMC", "Type": "Customer", "Location": "13.2000, 78.7500"},
@@ -243,7 +252,6 @@ df_paths = pd.DataFrame([
     {"From": "Madanapalli APMC", "To": "Bowenpally APMC", "Product": "Tomato", "Transportation Policy": "LTL"}
 ])
 
-# Write all 5 required tables into a single Excel scenario workbook
 alx_path = os.path.join(base_dir, "anyLogistix_Scenario_Input.xlsx")
 with pd.ExcelWriter(alx_path, engine="openpyxl") as writer:
     df_customers.to_excel(writer, sheet_name="Customers", index=False)
@@ -252,4 +260,4 @@ with pd.ExcelWriter(alx_path, engine="openpyxl") as writer:
     df_expenses.to_excel(writer, sheet_name="Facility Expenses", index=False)
     df_paths.to_excel(writer, sheet_name="Paths", index=False)
 
-print("Master pipeline execution complete. 'anyLogistix_Scenario_Input.xlsx' generated successfully.")
+print("Pipeline execution complete. 'anyLogistix_Scenario_Input.xlsx' generated successfully.")
